@@ -68,6 +68,41 @@ The data arise from a series of samples before and after the seastar wasting eve
 counts <- read.csv("./data/transectcounts.csv")
 colnames(counts)
 ## get sunflower stars only by before/after comparison
-stars <- counts[,c("ssws","sunflower.star")]
+seastars <- counts[,c("ssws","sunflower.star")]
+```
+
+# Analyses
+
+## Simple Poisson GLM 
+
+```{r glm_1}
+## total survey area in m^2
+area <- 3.75
+
+mod1 <- glm(sunflower.star ~ ssws, data = seastars, family = poisson(link = "log"))
+summary(mod1)
+
+## estimated mean density before
+b_mean <- exp(sum(coef(mod1)))/area
+b_mean
+## estimated mean density after
+a_mean <- exp(coef(mod1)[1])/area
+a_mean
+```
+
+## Quasi-Poisson GLM 
+
+The data are obviously overdispersed, so let's try a quasi-likelihood.
+
+```{r glm_2}
+mod2 <- glm(sunflower.star ~ ssws, data = seastars, family = quasipoisson(link = "log"))
+summary(mod2)
+
+## estimated mean density before
+b_mean <- exp(sum(coef(mod2)))/area
+b_mean
+## estimated mean density after
+a_mean <- exp(coef(mod2)[1])/area
+a_mean
 ```
 

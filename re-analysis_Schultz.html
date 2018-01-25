@@ -271,7 +271,88 @@ colnames(counts)</code></pre>
 ## [16] &quot;sculpin&quot;             &quot;shrimp&quot;              &quot;spot.prawn&quot;         
 ## [19] &quot;squat.lobster&quot;       &quot;sunflower.star&quot;      &quot;white.urchin&quot;</code></pre>
 <pre class="r"><code>## get sunflower stars only by before/after comparison
-stars &lt;- counts[,c(&quot;ssws&quot;,&quot;sunflower.star&quot;)]</code></pre>
+seastars &lt;- counts[,c(&quot;ssws&quot;,&quot;sunflower.star&quot;)]</code></pre>
+</div>
+</div>
+<div id="analyses" class="section level1">
+<h1>Analyses</h1>
+<div id="simple-poisson-glm" class="section level2">
+<h2>Simple Poisson GLM</h2>
+<pre class="r"><code>## total survey area in m^2
+area &lt;- 3.75
+
+mod1 &lt;- glm(sunflower.star ~ ssws, data = seastars, family = poisson(link = &quot;log&quot;))
+summary(mod1)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = sunflower.star ~ ssws, family = poisson(link = &quot;log&quot;), 
+##     data = seastars)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -1.7819  -1.7819  -0.6519  -0.6519  15.7531  
+## 
+## Coefficients:
+##             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)  -1.5488     0.2425  -6.386 1.70e-10 ***
+## sswsbefore    2.0110     0.2583   7.787 6.88e-15 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for poisson family taken to be 1)
+## 
+##     Null deviance: 709.68  on 159  degrees of freedom
+## Residual deviance: 614.61  on 158  degrees of freedom
+## AIC: 712.16
+## 
+## Number of Fisher Scoring iterations: 7</code></pre>
+<pre class="r"><code>## estimated mean density before
+b_mean &lt;- exp(sum(coef(mod1)))/area
+b_mean</code></pre>
+<pre><code>## [1] 0.4233333</code></pre>
+<pre class="r"><code>## estimated mean density after
+a_mean &lt;- exp(coef(mod1)[1])/area
+a_mean</code></pre>
+<pre><code>## (Intercept) 
+##  0.05666667</code></pre>
+</div>
+<div id="quasi-poisson-glm" class="section level2">
+<h2>Quasi-Poisson GLM</h2>
+<p>The data are obviously overdispersed, so let’s try a quasi-likelihood.</p>
+<pre class="r"><code>mod2 &lt;- glm(sunflower.star ~ ssws, data = seastars, family = quasipoisson(link = &quot;log&quot;))
+summary(mod2)</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = sunflower.star ~ ssws, family = quasipoisson(link = &quot;log&quot;), 
+##     data = seastars)
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -1.7819  -1.7819  -0.6519  -0.6519  15.7531  
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(&gt;|t|)  
+## (Intercept)   -1.549      1.003  -1.544   0.1245  
+## sswsbefore     2.011      1.068   1.883   0.0615 .
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for quasipoisson family taken to be 17.09982)
+## 
+##     Null deviance: 709.68  on 159  degrees of freedom
+## Residual deviance: 614.61  on 158  degrees of freedom
+## AIC: NA
+## 
+## Number of Fisher Scoring iterations: 7</code></pre>
+<pre class="r"><code>## estimated mean density before
+b_mean &lt;- exp(sum(coef(mod2)))/area
+b_mean</code></pre>
+<pre><code>## [1] 0.4233333</code></pre>
+<pre class="r"><code>## estimated mean density after
+a_mean &lt;- exp(coef(mod2)[1])/area
+a_mean</code></pre>
+<pre><code>## (Intercept) 
+##  0.05666667</code></pre>
 </div>
 </div>
 
