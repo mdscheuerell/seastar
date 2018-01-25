@@ -1,0 +1,73 @@
+---
+title: "Re-analysis of data in Schultz et al. (2016)"
+author: "Mark Scheuerell"
+date: "1/24/2018"
+output:
+  html_document:
+    fig_caption: yes
+    theme: cerulean
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+***
+
+This is version `r paste0('0.',format(Sys.time(), '%y.%m.%d'))`.
+
+***
+
+# Background
+
+## Model for count data
+
+The Poisson distribution is a rather straightforward option for modeling count data. If we expect, on average, $\lambda_t$ individuals m^-1^ in each of the 2 time periods $t$, and we sample a total of $A$ m^2^, then each of $i$ counts ($c_{i,t}$) from time period $t$ can me modeled as
+
+$$
+c_{i,t} \sim \text{Poisson}(\lambda_t A)
+$$
+
+Because the rate constant $\lambda_t$ must be greater than zero, one generally assumes a log-link whereby
+
+$$
+\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)
+$$
+
+In this case, the comparison of interest is the mean density (m^-1^) of sea stars before and after the wasting event.
+
+# Data
+
+Schultz et al. were very considerate in posting the data they used for the analyses and figures in their paper. Those data are available in MS Excel format from _PeerJ_'s server in a file called [Schultz_data_ver2.xlsx](https://peerj.com/articles/1980/#supp-1). To read the data into __R__, I'll use [Jenny Bryan](https://github.com/jennybc)'s [__readxl__](http://readxl.tidyverse.org/) package.
+
+## Step 1: Convert raw Excel workbook to csv files
+
+```{r, get_author_data}
+## load readxl
+library(readxl)
+library(readr)
+orig_data <-"./data/Schultz_data_ver2.xlsx"
+## Worksheets in notebook
+sht_names <- excel_sheets(orig_data)
+## Covert worksheets to csv
+if(length(list.files("./data/", "csv")) == 0) {
+  for(i in sht_names) {
+    tmp_csv <- read_xlsx(orig_data, sheet = i)
+    write_csv(tmp_csv, path = paste0("./data/", i))
+  }
+}
+```
+
+## Step 2: Load count data
+
+The data arise from a series of samples before and after the seastar wasting event, with counts of various species obtained within 0.25 m^2^ quadrats at 15 locations along each of 4 transects at 20 different sites. The data reported by the authors has been summed across all of the 15 quadrats for each transect/site combination, so the data frame has a total of (2 periods) x (4 transects) x (20 sites) = 160 rows.
+
+```{r read_count_data}
+counts <- read.csv("./data/transectcounts.csv")
+colnames(counts)
+## get sunflower stars only by before/after comparison
+stars <- counts[,c("ssws","sunflower.star")]
+```
+
