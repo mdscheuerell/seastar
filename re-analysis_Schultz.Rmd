@@ -62,18 +62,17 @@ if(length(list.files("./data/", "csv")) == 0) {
 
 ## Step 2: Load count data
 
-The data arise from a series of samples before and after the seastar wasting event, with counts of various species obtained within 0.25 m^2^ quadrats at 15 locations along each of 4 transects at 20 different sites. The data reported by the authors has been summed across all of the 15 quadrats for each transect/site combination, so the data frame has a total of (2 periods) x (4 transects) x (20 sites) = 160 rows.
+The data arise from a series of samples before and after the seastar wasting event, with counts of various species obtained within 0.25 m^2^ quadrats at 15 locations along each of 4 transects at 20 different sites. The counts reported by the authors have been summed across all of the 15 quadrats for each transect/site combination, so the data frame has a total of (2 periods) x (4 transects) x (20 sites) = 160 rows.
 
 ```{r read_count_data}
+## get count data
 counts <- read_csv("./data/transectcounts.csv")
 colnames(counts)
 ## split out before/after counts of sunflower stars
-bef <- counts %>%
-  filter(ssws=="before") %>%
-  select(sunflower.star)
-aft <- counts %>%
-  filter(ssws=="after") %>%
-  select(sunflower.star)
+stars <- counts %>%
+  select(ssws, transect, sunflower.star) %>%
+  spread(ssws, value = sunflower.star)  %>%
+  select(-transect)
 ```
 
 # Analyses
@@ -85,13 +84,13 @@ aft <- counts %>%
 area <- 3.75
 
 ## estimated mean density before
-b_fit <- glm(sunflower.star ~ 1, data = bef, family = poisson(link = "log"))
+b_fit <- glm(before ~ 1, data = stars, family = poisson(link = "log"))
 summary(b_fit)
 b_mean <- exp(sum(coef(b_fit)))/area
 b_mean
 
 ## estimated mean density after
-a_fit <- glm(sunflower.star ~ 1, data = aft, family = poisson(link = "log"))
+a_fit <- glm(after ~ 1, data = stars, family = poisson(link = "log"))
 summary(a_fit)
 a_mean <- exp(sum(coef(a_fit)))/area
 a_mean
@@ -121,36 +120,27 @@ library(R2jags)
 cat("
 
 data {
-
-  N <- dim(counts);
-
+  N <- dim(stars);
 }
 
 model {
-
   ## PRIORS
-#  lambda_bef ~ dunif(0,10);
-#  lambda_aft ~ dunif(0,10);
   ln_lambda_bef ~ dnorm(0,0.01);
   ln_lambda_aft ~ dnorm(0,0.01);
   lambda_bef <- exp(ln_lambda_bef);
   lambda_aft <- exp(ln_lambda_aft);
-  
   ## LIKELIHOOD
   for(i in 1:N[1]) {
-    counts[i,1] ~ dpois(lambda_bef * area);
-    counts[i,2] ~ dpois(lambda_aft * area);
+    stars[i,1] ~ dpois(lambda_aft * area);
+    stars[i,2] ~ dpois(lambda_bef * area);
   }
-
 } ## end model description
 
 ", file="poisson_glm.txt")
 
 
 ## 1. data to pass to JAGS
-counts <- cbind(bef, aft)
-colnames(counts) <- c("before", "after")
-dat_jags <- c("counts", "area") 
+dat_jags <- c("stars", "area") 
 
 ## 2. model params/states for JAGS to return
 par_jags <- c("lambda_bef","lambda_aft")
@@ -176,7 +166,7 @@ mod_jags <- list(data = dat_jags,
 mod_fit <- do.call(jags.parallel, mod_jags)
 print(mod_fit)
 tbl_smry <- mod_fit$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","97.5%")]
-print(tbl_smry, digits = 3, quote = FALSE, justify = "right")
+print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
 ```
 
 ### Examine fits
@@ -191,10 +181,10 @@ par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
 xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.02)
 brk <- seq(0, xmx, 0.01)
 hist(mod_fit$BUGSoutput$sims.list$lambda_bef, breaks = brk,
-     col="blue", border="white",
+     col="blue", border=NA,
      main="", xlab=expression(lambda[before]))
 hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
-     col="blue", border="white",
+     col="blue", border=NA,
      main="", xlab=expression(lambda[after]))
 
 ```
