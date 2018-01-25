@@ -1,0 +1,26 @@
+
+
+data {
+
+  N <- dim(counts);
+
+}
+
+model {
+
+  ## PRIORS
+#  lambda_bef ~ dunif(0,10);
+#  lambda_aft ~ dunif(0,10);
+  ln_lambda_bef ~ dnorm(0,0.01);
+  ln_lambda_aft ~ dnorm(0,0.01);
+  lambda_bef <- exp(ln_lambda_bef);
+  lambda_aft <- exp(ln_lambda_aft);
+  
+  ## LIKELIHOOD
+  for(i in 1:N[1]) {
+    counts[i,1] ~ dpois(lambda_bef * area);
+    counts[i,2] ~ dpois(lambda_aft * area);
+  }
+
+} ## end model description
+

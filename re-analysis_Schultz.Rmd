@@ -24,7 +24,7 @@ This is version `r paste0('0.',format(Sys.time(), '%y.%m.%d'))`.
 
 ## Model for count data
 
-The Poisson distribution is a rather straightforward option for modeling count data. If we expect, on average, $\lambda_t$ individuals m^-1^ in each of the 2 time periods $t$, and we sample a total of $A$ m^2^, then each of $i$ counts ($c_{i,t}$) from time period $t$ can me modeled as
+The Poisson distribution is a rather straightforward option for modeling count data. If we expect, on average, $\lambda_t$ individuals m^-1^ in each of the 2 time periods $t$, and we sample a total of $A$ m^2^, then each of $i$ counts from time period $t$ ($c_{i,t}$) can me modeled as
 
 $$
 c_{i,t} \sim \text{Poisson}(\lambda_t A)
@@ -45,9 +45,9 @@ Schultz et al. were very considerate in posting the data they used for the analy
 ## Step 1: Convert raw Excel workbook to csv files
 
 ```{r, get_author_data}
-## load readxl
 library(readxl)
-library(readr)
+library(tidyverse)
+## original data file
 orig_data <-"./data/Schultz_data_ver2.xlsx"
 ## Worksheets in notebook
 sht_names <- excel_sheets(orig_data)
@@ -65,10 +65,15 @@ if(length(list.files("./data/", "csv")) == 0) {
 The data arise from a series of samples before and after the seastar wasting event, with counts of various species obtained within 0.25 m^2^ quadrats at 15 locations along each of 4 transects at 20 different sites. The data reported by the authors has been summed across all of the 15 quadrats for each transect/site combination, so the data frame has a total of (2 periods) x (4 transects) x (20 sites) = 160 rows.
 
 ```{r read_count_data}
-counts <- read.csv("./data/transectcounts.csv")
+counts <- read_csv("./data/transectcounts.csv")
 colnames(counts)
-## get sunflower stars only by before/after comparison
-seastars <- counts[,c("ssws","sunflower.star")]
+## split out before/after counts of sunflower stars
+bef <- counts %>%
+  filter(ssws=="before") %>%
+  select(sunflower.star)
+aft <- counts %>%
+  filter(ssws=="after") %>%
+  select(sunflower.star)
 ```
 
 # Analyses
@@ -79,22 +84,24 @@ seastars <- counts[,c("ssws","sunflower.star")]
 ## total survey area in m^2
 area <- 3.75
 
-mod1 <- glm(sunflower.star ~ ssws, data = seastars, family = poisson(link = "log"))
-summary(mod1)
-
 ## estimated mean density before
-b_mean <- exp(sum(coef(mod1)))/area
+b_fit <- glm(sunflower.star ~ 1, data = bef, family = poisson(link = "log"))
+summary(b_fit)
+b_mean <- exp(sum(coef(b_fit)))/area
 b_mean
+
 ## estimated mean density after
-a_mean <- exp(coef(mod1)[1])/area
+a_fit <- glm(sunflower.star ~ 1, data = aft, family = poisson(link = "log"))
+summary(a_fit)
+a_mean <- exp(sum(coef(a_fit)))/area
 a_mean
 ```
 
 ## Quasi-Poisson GLM 
 
-The data are obviously overdispersed, so let's try a quasi-likelihood.
+The data are obviously overdispersed, so let's try a quasi-Poisson likelihood.
 
-```{r glm_2}
+```{r glm_2, eval=FALSE}
 mod2 <- glm(sunflower.star ~ ssws, data = seastars, family = quasipoisson(link = "log"))
 summary(mod2)
 
@@ -104,5 +111,91 @@ b_mean
 ## estimated mean density after
 a_mean <- exp(coef(mod2)[1])/area
 a_mean
+```
+
+## Bayesian Poisson GLM
+
+```{r glm_jags, message=FALSE}
+library(R2jags)
+
+cat("
+
+data {
+
+  N <- dim(counts);
+
+}
+
+model {
+
+  ## PRIORS
+#  lambda_bef ~ dunif(0,10);
+#  lambda_aft ~ dunif(0,10);
+  ln_lambda_bef ~ dnorm(0,0.01);
+  ln_lambda_aft ~ dnorm(0,0.01);
+  lambda_bef <- exp(ln_lambda_bef);
+  lambda_aft <- exp(ln_lambda_aft);
+  
+  ## LIKELIHOOD
+  for(i in 1:N[1]) {
+    counts[i,1] ~ dpois(lambda_bef * area);
+    counts[i,2] ~ dpois(lambda_aft * area);
+  }
+
+} ## end model description
+
+", file="poisson_glm.txt")
+
+
+## 1. data to pass to JAGS
+counts <- cbind(bef, aft)
+colnames(counts) <- c("before", "after")
+dat_jags <- c("counts", "area") 
+
+## 2. model params/states for JAGS to return
+par_jags <- c("lambda_bef","lambda_aft")
+
+## 3. MCMC control params
+mcmc_chains <- 4
+mcmc_length <- 2e4
+mcmc_burn <- 1e4
+mcmc_thin <- 20
+## total number of MCMC samples
+mcmc_samp <- (mcmc_length-mcmc_burn)*mcmc_chains/mcmc_thin
+
+## list of model info for JAGS
+mod_jags <- list(data = dat_jags,
+                 model.file = "poisson_glm.txt",
+                 parameters.to.save = par_jags,
+                 n.chains = as.integer(mcmc_chains),
+                 n.iter = as.integer(mcmc_length),
+                 n.burnin = as.integer(mcmc_burn),
+                 n.thin = as.integer(mcmc_thin))
+
+## fit model
+mod_fit <- do.call(jags.parallel, mod_jags)
+print(mod_fit)
+tbl_smry <- mod_fit$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","97.5%")]
+print(tbl_smry, digits = 3, quote = FALSE, justify = "right")
+```
+
+### Examine fits
+
+```{r plot_fits, fig.height=6, fig.width=4}
+Re2prec <- function(x, map = "round", prec = 1) {
+  if(prec<=0) { stop("\"prec\" must be greater than 0") }
+  do.call(map,list(x/prec))*prec
+}
+## plot posteriors
+par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
+xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.02)
+brk <- seq(0, xmx, 0.01)
+hist(mod_fit$BUGSoutput$sims.list$lambda_bef, breaks = brk,
+     col="blue", border="white",
+     main="", xlab=expression(lambda[before]))
+hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
+     col="blue", border="white",
+     main="", xlab=expression(lambda[after]))
+
 ```
 
