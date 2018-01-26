@@ -26,13 +26,31 @@ This is version `r paste0('0.',format(Sys.time(), '%y.%m.%d'))`.
 The before/after comparison of organism densities in Schultz et al. is based upon discrete counts of individuals. Among the options for analyzing count data, the Poisson distribution is rather straightforward. If we expect, on average, $\lambda_t$ individuals m^-2^ in time period $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) can me modeled as
 
 $$
-c_{i,t} \sim \text{Poisson}(\lambda_t A)
+c_{i,t} \sim \text{Poisson}(\lambda_t A).
 $$
 
 Because the rate constant $\lambda_t$ must be greater than zero, one generally assumes a log-link whereby
 
 $$
-\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)
+\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2).
+$$
+
+Another alternatve is the negative binomial distribution, which has an additional parameter to account for overdispersion in the data. Specifically,
+
+$$
+c_{i,t} \sim \text{NegBin}(p, r).
+$$
+
+The shape (dispersion) parameter $r$ must be greater than zero and can be modeled with a uniform distribution, such that
+
+$$
+r \sim \text{Uniform}(0, U)
+$$
+
+The probability parameter $p$ can be written in terms of $r$ and the underlying mean $\lambda_t A$, whereby
+
+$$
+p = \over{}{}
 $$
 
 In this case, the comparison of interest is the mean density (m^-2^) of sea stars before and after the wasting event.
