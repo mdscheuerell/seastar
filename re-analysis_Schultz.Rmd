@@ -63,6 +63,13 @@ library(patchwork)
 ## for model fitting
 library(R2jags)
 library(rstanarm)
+## function for number conversion
+Re2prec <- function(x, map = "round", prec = 1) {
+  ## 'map' can be round, floor, or ceiling
+  ## 'prec' is nearest unit (eg, 0.1 = nearest tenth; 1 = nearest integer)
+  if(prec<=0) { stop("\"prec\" must be greater than 0") }
+  return(do.call(map,list(x/prec))*prec)
+}
 ```
 
 # Data
@@ -76,13 +83,13 @@ The [code](https://peerj.com/articles/1980/#supp-2) provided by the authors work
 ```{r, get_author_data}
 ## original data file
 orig_data <-"./data/Schultz_data_ver2.xlsx"
-## Worksheets in notebook
+## worksheets in notebook
 sht_names <- excel_sheets(orig_data)
-## Covert worksheets to csv
+## convert worksheets to csv
 if(length(list.files("./data/", "csv")) == 0) {
   for(i in sht_names) {
-    tmp_csv <- read_xlsx(orig_data, sheet = i)
-    write_csv(tmp_csv, path = paste0("./data/", i))
+    orig_data %>% read_xlsx(sheet = i) %>%
+      write_csv(path = paste0("./data/", i))
   }
 }
 ```
@@ -127,25 +134,25 @@ p1 + p2 & theme_bw() &
 
 # Analyses
 
-## Poisson GLM 
+## Poisson models 
 
-### Frequentist using `glm`
+### Frequentist using `glm()`
 
 ```{r glm_1}
 ## total survey area in m^2
 area <- 3.75
 
 ## estimated mean density before
-b_fit <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
-summary(b_fit)
-b_mean <- exp(sum(coef(b_fit)))/area
-b_mean
+glm_fit_bef <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
+summary(glm_fit_bef)
+## convert from log to real space
+round(lambda_bef <- exp(coef(glm_fit_bef))/area, 2)
 
 ## estimated mean density after
-a_fit <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
-summary(a_fit)
-a_mean <- exp(sum(coef(a_fit)))/area
-a_mean
+glm_fit_aft <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
+summary(glm_fit_aft)
+## convert from log to real space
+round(lambda_aft <- exp(coef(glm_fit_aft))/area, 2)
 ```
 
 ## Bayesian using `JAGS`
@@ -206,10 +213,6 @@ print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
 ### Examine fits
 
 ```{r plot_fits, fig.height=6, fig.width=4}
-Re2prec <- function(x, map = "round", prec = 1) {
-  if(prec<=0) { stop("\"prec\" must be greater than 0") }
-  do.call(map,list(x/prec))*prec
-}
 ## plot posteriors
 par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
 xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_aft,
@@ -221,7 +224,6 @@ hist(mod_fit$BUGSoutput$sims.list$lambda_bef, breaks = brk,
 hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
      col="blue", border=NA,
      main="", xlab=expression(lambda[after]))
-
 ```
 
 ## Negative binomial GLM
