@@ -8,6 +8,7 @@ model {
   ## PRIORS
   ln_lambda_bef ~ dnorm(0,0.01);
   ln_lambda_aft ~ dnorm(0,0.01);
+  ## DERIVED PARAMS
   lambda_bef <- exp(ln_lambda_bef);
   lambda_aft <- exp(ln_lambda_aft);
   ## LIKELIHOOD
@@ -15,5 +16,5 @@ model {
     stars_wide[i,1] ~ dpois(lambda_aft * area);
     stars_wide[i,2] ~ dpois(lambda_bef * area);
   }
-} ## end model description
+}
 

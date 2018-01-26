@@ -124,8 +124,8 @@ pp <- ggplot(stars_tidy, aes(x=time, y=count, color=time))
 p1 <- pp + geom_jitter(shape=16, position=position_jitter(0.3))
 ## violin plot
 p2 <- pp + geom_violin()
-## combined
-p1 + p2 & theme_bw() &
+## combine plots
+p1 + p2 &
   theme(legend.position="none") &
   scale_x_discrete(limits=c("before","after")) &
   labs(x = "", y = "Count")
@@ -157,7 +157,8 @@ round(lambda_aft <- exp(coef(glm_fit_aft))/area, 2)
 
 ## Bayesian using `JAGS`
 
-```{r pois_glm_jags, message=FALSE}
+```{r pois_fit_jags, message=FALSE}
+## define Poisson model in JAGS
 cat("
 
 data {
@@ -168,6 +169,7 @@ model {
   ## PRIORS
   ln_lambda_bef ~ dnorm(0,0.01);
   ln_lambda_aft ~ dnorm(0,0.01);
+  ## DERIVED PARAMS
   lambda_bef <- exp(ln_lambda_bef);
   lambda_aft <- exp(ln_lambda_aft);
   ## LIKELIHOOD
@@ -175,25 +177,21 @@ model {
     stars_wide[i,1] ~ dpois(lambda_aft * area);
     stars_wide[i,2] ~ dpois(lambda_bef * area);
   }
-} ## end model description
+}
 
-", file="poisson_glm.txt")
+", file="poisson_glm.txt") ## end model description
 
-
-## 1. data to pass to JAGS
+## data to pass to JAGS
 dat_jags <- c("stars_wide", "area") 
-
-## 2. model params for JAGS to return
+## model params for JAGS to return
 par_jags <- c("lambda_bef","lambda_aft")
-
-## 3. MCMC control params
+## MCMC control params
 mcmc_chains <- 4
 mcmc_length <- 2e4
 mcmc_burn <- 1e4
 mcmc_thin <- 20
 ## total number of MCMC samples
 mcmc_samp <- (mcmc_length-mcmc_burn)*mcmc_chains/mcmc_thin
-
 ## list of model info for JAGS
 mod_jags <- list(data = dat_jags,
                  model.file = "poisson_glm.txt",
@@ -202,35 +200,53 @@ mod_jags <- list(data = dat_jags,
                  n.iter = as.integer(mcmc_length),
                  n.burnin = as.integer(mcmc_burn),
                  n.thin = as.integer(mcmc_thin))
-
 ## fit model
 mod_fit <- do.call(jags.parallel, mod_jags)
+```
+
+### Examine parameter estimates
+
+The first thing we can do is examine a summary table of the posterior samples.
+
+```{r print_pois_fit_jags}
 print(mod_fit)
-tbl_smry <- mod_fit$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","97.5%")]
-print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
 ```
 
-### Examine fits
+Visual summaries of the results can also be useful. Here are histograms of the samples (left) and a summary of the median and 95% credible interval (right).
 
-```{r plot_fits, fig.height=6, fig.width=4}
-## plot posteriors
-par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
-xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_aft,
-                   mod_fit$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.02)
-brk <- seq(0, xmx, 0.01)
-hist(mod_fit$BUGSoutput$sims.list$lambda_bef, breaks = brk,
-     col="blue", border=NA,
-     main="", xlab=expression(lambda[before]))
-hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
-     col="blue", border=NA,
-     main="", xlab=expression(lambda[after]))
+```{r plot_pois_fit_jags, fig.height=4, fig.width=7, message=FALSE}
+## gather posteriors samples
+pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
+                   samples = c(mod_fit$BUGSoutput$sims.list$lambda_bef,
+                               mod_fit$BUGSoutput$sims.list$lambda_aft))
+## summary of posteriors
+pdat2 <- pdat %>%
+  group_by(Time) %>%
+  summarize(lo = quantile(samples, 0.025),
+            med = quantile(samples, 0.5),
+            hi = quantile(samples, 0.975))
+## histogram of posteriors
+p1 <- ggplot(pdat, aes(samples, fill = Time)) +
+  geom_histogram(bins = 200) +
+  guides(fill = guide_legend(reverse=TRUE)) +
+  labs(x = expression(Density~(m^-2)), y = "Count")
+p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
+  geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
+  geom_line() +
+  geom_point(aes(size=1.2)) +
+  scale_x_discrete(limits=c("before","after")) +
+  xlab("") +
+  ylab(expression(Density~(m^-2))) +
+  theme(legend.position="none")
+p1 + p2
 ```
 
-## Negative binomial GLM
+## Negative binomial models
 
 ## Bayesian using `JAGS`
 
-```{r nb_glm_jags, message=FALSE}
+```{r nb_fit_jags, message=FALSE}
+## define negative binomial model in JAGS
 cat("
 
 data {
@@ -259,10 +275,9 @@ model {
     stars_wide[i,1] ~ dnegbin(p_aft, r_aft);
     stars_wide[i,2] ~ dnegbin(p_bef, r_bef);
   }
-} ## end model description
+}
 
-", file="negbin_glm.txt")
-
+", file="negbin_glm.txt") ## end model description
 
 ## update model params for JAGS to return
 par_jags <- c("lambda_bef","mean_bef","var_bef","lambda_aft","mean_aft","var_aft")
@@ -273,51 +288,46 @@ mod_jags$parameters.to.save <- par_jags
 
 ## fit model
 mod_fit_2 <- do.call(jags.parallel, mod_jags)
-print(mod_fit_2)
-tbl_smry <- mod_fit_2$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","97.5%")]
-print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
 ```
 
-```{r, plot_rates, fig.height=4, fig.width=4, warning=FALSE, message=FALSE}
-## base graphics
-pdat <- tbl_smry[c(1,4), c("2.5%","50%","97.5%")]
-par(mai=c(0.5,0.9,0.1,0.1), omi=c(0,0,0,0))
-plot(c(1,2), pdat[,"50%"], pch=16, cex=1.5,
-     xlim=c(0.5,2.5), ylim=c(0,max(pdat)),
-     xlab="", xaxt="n", ylab=expression(Density~(m^-2)))
-segments(c(1,2), pdat[,"2.5%"], c(1,2), pdat[,"97.5%"], lwd=2)
-axis(1, at = c(1,2), labels = c("Before","After"), tick = FALSE)
-## ggplot
-colnames(pdat) <- c("lo","med","hi")
-pdat <- as.data.frame(pdat)
-pdat$time <- c("Before","After")
-ggplot(pdat, aes(x=time, y=med)) +
+### Examine parameter estimates
+
+Again we can examine a summary table of the parameter estimates. Notice that in this case, we also have estimates for mean and variance of the density of stars per 3.75 m^2^.
+
+```{r}
+print(mod_fit_2)
+```
+
+This time I use a frequency plot instead of a histogram because the overlap in the distributions makes it hard to discern otherwise.
+
+```{r plot_nb_fit_jags, fig.height=4, fig.width=7, message=FALSE}
+## gather posteriors samples
+pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
+                   samples = c(mod_fit_2$BUGSoutput$sims.list$lambda_bef,
+                               mod_fit_2$BUGSoutput$sims.list$lambda_aft))
+## summary of posteriors
+pdat2 <- pdat %>%
+  group_by(Time) %>%
+  summarize(lo = quantile(samples, 0.025),
+            med = quantile(samples, 0.5),
+            hi = quantile(samples, 0.975))
+## trim away big values for histogram
+pdat <- pdat %>%
+  filter(samples <= 1.5)
+## histogram of posteriors
+p1 <- ggplot(pdat, aes(samples, color = Time)) +
+  geom_freqpoly(bins = 100) +
+  guides(color = guide_legend(reverse=TRUE)) +
+  labs(x = expression(Density~(m^-2)), y = "Count")
+p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
   geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
   geom_line() +
-  geom_point(aes(size=1.5)) +
-  scale_x_discrete(limits=c("Before","After")) +
-  xlab("") +
-  ylab(expression(Density~(m^-2))) +
-  guides(size="none") +
-  theme_bw()
+  geom_point(aes(size=1.2)) +
+  scale_x_discrete(limits=c("before","after")) +
+  labs(x = "", y = expression(Density~(m^-2))) +
+  theme(legend.position="none")
+p1 + p2
 ```
 
 
-### Examine fits
-
-In this case, the extra parameter for overdispersion leads to very long right tails of the distributions for the mean density. Thus, for plotting purposes only, we'll trim the largest 1% of values.
-
-```{r plot_fits_nb, fig.height=6, fig.width=4}
-plot_aft <- sort(mod_fit_2$BUGSoutput$sims.list$lambda_aft)[1:(mcmc_samp - mcmc_samp/100)]
-## plot posteriors
-par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
-xmx <- Re2prec(max(plot_aft, mod_fit_2$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.05)
-brk <- seq(0, xmx, 0.05)
-hist(mod_fit_2$BUGSoutput$sims.list$lambda_bef, breaks = brk,
-     col="blue", border=NA,
-     main="", xlab=expression(lambda[before]))
-hist(plot_aft, breaks = brk,
-     col="blue", border=NA,
-     main="", xlab=expression(lambda[after]))
-```
 

@@ -26,5 +26,5 @@ model {
     stars_wide[i,1] ~ dnegbin(p_aft, r_aft);
     stars_wide[i,2] ~ dnegbin(p_bef, r_bef);
   }
-} ## end model description
+}
 
