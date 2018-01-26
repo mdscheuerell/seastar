@@ -77,7 +77,9 @@ stars <- counts %>%
 
 # Analyses
 
-## Simple Poisson GLM 
+## Poisson GLM 
+
+### Frequentist using `glm`
 
 ```{r glm_1}
 ## total survey area in m^2
@@ -96,25 +98,9 @@ a_mean <- exp(sum(coef(a_fit)))/area
 a_mean
 ```
 
-## Quasi-Poisson GLM 
+## Bayesian using `JAGS`
 
-The data are obviously overdispersed, so let's try a quasi-Poisson likelihood.
-
-```{r glm_2, eval=FALSE}
-mod2 <- glm(sunflower.star ~ ssws, data = seastars, family = quasipoisson(link = "log"))
-summary(mod2)
-
-## estimated mean density before
-b_mean <- exp(sum(coef(mod2)))/area
-b_mean
-## estimated mean density after
-a_mean <- exp(coef(mod2)[1])/area
-a_mean
-```
-
-## Bayesian Poisson GLM
-
-```{r glm_jags, message=FALSE}
+```{r pois_glm_jags, message=FALSE}
 library(R2jags)
 
 cat("
@@ -142,7 +128,7 @@ model {
 ## 1. data to pass to JAGS
 dat_jags <- c("stars", "area") 
 
-## 2. model params/states for JAGS to return
+## 2. model params for JAGS to return
 par_jags <- c("lambda_bef","lambda_aft")
 
 ## 3. MCMC control params
@@ -178,7 +164,8 @@ Re2prec <- function(x, map = "round", prec = 1) {
 }
 ## plot posteriors
 par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
-xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.02)
+xmx <- Re2prec(max(mod_fit$BUGSoutput$sims.list$lambda_aft,
+                   mod_fit$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.02)
 brk <- seq(0, xmx, 0.01)
 hist(mod_fit$BUGSoutput$sims.list$lambda_bef, breaks = brk,
      col="blue", border=NA,
@@ -187,5 +174,86 @@ hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
      col="blue", border=NA,
      main="", xlab=expression(lambda[after]))
 
+```
+
+## Negative binomial GLM
+
+## Bayesian using `JAGS`
+
+```{r nb_glm_jags, message=FALSE}
+cat("
+
+data {
+  N <- dim(stars);
+}
+
+model {
+  ## PRIORS
+  ln_lambda_bef ~ dnorm(0,0.01);
+  ln_lambda_aft ~ dnorm(0,0.01);
+  r_bef ~ dunif(0,100);
+  r_aft ~ dunif(0,100);
+  ## DERIVED PARAMS
+  lambda_bef <- exp(ln_lambda_bef);
+  lambda_aft <- exp(ln_lambda_aft);
+  mu_bef <- lambda_bef * area; 
+  mu_aft <- lambda_aft * area; 
+  p_aft <- r_aft / (r_aft + mu_aft);
+  p_bef <- r_bef / (r_bef + mu_bef);
+  mean_bef <- r_bef * (1 - p_bef) / p_bef;
+  mean_aft <- r_aft * (1 - p_aft) / p_aft;
+  var_bef <- mean_bef / p_bef;
+  var_aft <- mean_aft / p_aft;
+  ## LIKELIHOOD
+  for(i in 1:N[1]) {
+    stars[i,1] ~ dnegbin(p_aft, r_aft);
+    stars[i,2] ~ dnegbin(p_bef, r_bef);
+  }
+} ## end model description
+
+", file="negbin_glm.txt")
+
+
+## update model params for JAGS to return
+par_jags <- c("lambda_bef","mean_bef","var_bef","lambda_aft","mean_aft","var_aft")
+
+## update list of model info for JAGS
+mod_jags$model.file <-"negbin_glm.txt"
+mod_jags$parameters.to.save <- par_jags
+
+## fit model
+mod_fit_2 <- do.call(jags.parallel, mod_jags)
+print(mod_fit_2)
+tbl_smry <- mod_fit_2$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","97.5%")]
+print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
+```
+
+```{r, plot_rates, fig.height=4, fig.width=4}
+pdat <- tbl_smry[c(1,4), c("2.5%","50%","97.5%")]
+par(mai=c(0.5,0.9,0.1,0.1), omi=c(0,0,0,0))
+plot(c(1,2), pdat[,"50%"], pch=16, cex=1.5,
+     xlim=c(0.5,2.5), ylim=c(0,max(pdat)),
+     xlab="", xaxt="n", ylab=expression(Density~(m^-2)))
+segments(c(1,2), pdat[,"2.5%"], c(1,2), pdat[,"97.5%"], lwd=2)
+axis(1, at = c(1,2), labels = c("Before","After"), tick = FALSE)
+```
+
+
+### Examine fits
+
+In this case, the extra parameter for overdispersion leads to very long right tails of the distributions for the mean density. Thus, for plotting purposes only, we'll trim the largest 1% of values.
+
+```{r plot_fits_nb, fig.height=6, fig.width=4}
+plot_aft <- sort(mod_fit_2$BUGSoutput$sims.list$lambda_aft)[1:(mcmc_samp - mcmc_samp/100)]
+## plot posteriors
+par(mfrow=c(2,1), mai=c(0.8,0.8,0.2,0.2), omi=c(0,0,0,0))
+xmx <- Re2prec(max(plot_aft, mod_fit_2$BUGSoutput$sims.list$lambda_bef), "ceiling", 0.05)
+brk <- seq(0, xmx, 0.05)
+hist(mod_fit_2$BUGSoutput$sims.list$lambda_bef, breaks = brk,
+     col="blue", border=NA,
+     main="", xlab=expression(lambda[before]))
+hist(plot_aft, breaks = brk,
+     col="blue", border=NA,
+     main="", xlab=expression(lambda[after]))
 ```
 
