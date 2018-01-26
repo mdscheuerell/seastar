@@ -228,7 +228,8 @@ tbl_smry <- mod_fit_2$BUGSoutput$summary[par_jags, c("mean","sd","2.5%","50%","9
 print(tbl_smry, digits = 2, quote = FALSE, justify = "right")
 ```
 
-```{r, plot_rates, fig.height=4, fig.width=4}
+```{r, plot_rates, fig.height=4, fig.width=4, warning=FALSE, message=FALSE}
+## base graphics
 pdat <- tbl_smry[c(1,4), c("2.5%","50%","97.5%")]
 par(mai=c(0.5,0.9,0.1,0.1), omi=c(0,0,0,0))
 plot(c(1,2), pdat[,"50%"], pch=16, cex=1.5,
@@ -236,6 +237,19 @@ plot(c(1,2), pdat[,"50%"], pch=16, cex=1.5,
      xlab="", xaxt="n", ylab=expression(Density~(m^-2)))
 segments(c(1,2), pdat[,"2.5%"], c(1,2), pdat[,"97.5%"], lwd=2)
 axis(1, at = c(1,2), labels = c("Before","After"), tick = FALSE)
+## ggplot
+colnames(pdat) <- c("lo","med","hi")
+pdat <- as.data.frame(pdat)
+pdat$time <- c("Before","After")
+ggplot(pdat, aes(x=time, y=med)) +
+  geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
+  geom_line() +
+  geom_point(aes(size=1.5)) +
+  scale_x_discrete(limits=c("Before","After")) +
+  xlab("") +
+  ylab(expression(Density~(m^-2))) +
+  guides(size="none") +
+  theme_bw()
 ```
 
 
