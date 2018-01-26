@@ -1,7 +1,7 @@
 
 
 data {
-  N <- dim(stars);
+  N <- dim(stars_wide);
 }
 
 model {
@@ -12,8 +12,8 @@ model {
   lambda_aft <- exp(ln_lambda_aft);
   ## LIKELIHOOD
   for(i in 1:N[1]) {
-    stars[i,1] ~ dpois(lambda_aft * area);
-    stars[i,2] ~ dpois(lambda_bef * area);
+    stars_wide[i,1] ~ dpois(lambda_aft * area);
+    stars_wide[i,2] ~ dpois(lambda_bef * area);
   }
 } ## end model description
 

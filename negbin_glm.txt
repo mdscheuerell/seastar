@@ -1,7 +1,7 @@
 
 
 data {
-  N <- dim(stars);
+  N <- dim(stars_wide);
 }
 
 model {
@@ -23,8 +23,8 @@ model {
   var_aft <- mean_aft / p_aft;
   ## LIKELIHOOD
   for(i in 1:N[1]) {
-    stars[i,1] ~ dnegbin(p_aft, r_aft);
-    stars[i,2] ~ dnegbin(p_bef, r_bef);
+    stars_wide[i,1] ~ dnegbin(p_aft, r_aft);
+    stars_wide[i,2] ~ dnegbin(p_bef, r_bef);
   }
 } ## end model description
 

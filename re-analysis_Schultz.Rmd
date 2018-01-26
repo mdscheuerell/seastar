@@ -1,7 +1,6 @@
 ---
 title: "Re-analysis of data in Schultz et al. (2016)"
 author: "Mark Scheuerell"
-date: "1/24/2018"
 output:
   html_document:
     fig_caption: yes
@@ -22,9 +21,9 @@ This is version `r paste0('0.',format(Sys.time(), '%y.%m.%d'))`.
 
 # Background
 
-## Model for count data
+## Models for count data
 
-The Poisson distribution is a rather straightforward option for modeling count data. If we expect, on average, $\lambda_t$ individuals m^-1^ in each of the 2 time periods $t$, and we sample a total of $A$ m^2^, then each of $i$ counts from time period $t$ ($c_{i,t}$) can me modeled as
+The before/after comparison of organism densities in Schultz et al. is based upon discrete counts of individuals. Among the options for analyzing count data, the Poisson distribution is rather straightforward. If we expect, on average, $\lambda_t$ individuals m^-2^ in time period $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) can me modeled as
 
 $$
 c_{i,t} \sim \text{Poisson}(\lambda_t A)
@@ -36,17 +35,45 @@ $$
 \log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)
 $$
 
-In this case, the comparison of interest is the mean density (m^-1^) of sea stars before and after the wasting event.
+In this case, the comparison of interest is the mean density (m^-2^) of sea stars before and after the wasting event.
+
+# Requirements
+
+I rely on a number of packages for reading, munging, and plotting the data, which include:
+
+* [Jenny Bryan's](https://github.com/jennybc) [__readxl__](http://readxl.tidyverse.org/);
+* several from [Hadley Wickham's](https://github.com/hadley) [__tidyverse__](http://www.tidyverse.org/);
+* [Thomas Lin Pederson's](https://github.com/thomasp85) [__patchwork__](https://github.com/thomasp85/patchwork).
+
+In addition to some frequentist approaches, I also show different options for Bayesian model fitting using the following software and packages:
+
+* [JAGS](http://mcmc-jags.sourceforge.net/) and the [__R2jags__](https://cran.r-project.org/web/packages/R2jags/index.html) package;
+* [Stan](http://mc-stan.org/) and the [__rstanarm__](http://mc-stan.org/rstanarm/index.html) package.
+
+```{r load_pkgs, message=FALSE}
+## for reading data
+library(readxl)
+library(readr)
+## for data munging
+library(dplyr)
+library(tidyr)
+## for plotting
+library(ggplot2)
+library(patchwork)
+## for model fitting
+library(R2jags)
+library(rstanarm)
+```
 
 # Data
 
-Schultz et al. were very considerate in posting the data they used for the analyses and figures in their paper. Those data are available in MS Excel format from _PeerJ_'s server in a file called [Schultz_data_ver2.xlsx](https://peerj.com/articles/1980/#supp-1). To read the data into __R__, I'll use [Jenny Bryan](https://github.com/jennybc)'s [__readxl__](http://readxl.tidyverse.org/) package.
+Schultz et al. were very considerate in posting the data they used for the analyses and figures in their paper. Those data are available in MS Excel format from _PeerJ_'s server in a file called [Schultz_data_ver2.xlsx](https://peerj.com/articles/1980/#supp-1).
 
-## Step 1: Convert raw Excel workbook to csv files
+## Step 1: Convert Excel workbook to csv files
+
+The [code](https://peerj.com/articles/1980/#supp-2) provided by the authors works with various data files in .csv format, so I begin by extracting those from the .xlsx file.
 
 ```{r, get_author_data}
-library(readxl)
-library(tidyverse)
 ## original data file
 orig_data <-"./data/Schultz_data_ver2.xlsx"
 ## Worksheets in notebook
@@ -64,16 +91,39 @@ if(length(list.files("./data/", "csv")) == 0) {
 
 The data arise from a series of samples before and after the seastar wasting event, with counts of various species obtained within 0.25 m^2^ quadrats at 15 locations along each of 4 transects at 20 different sites. The counts reported by the authors have been summed across all of the 15 quadrats for each transect/site combination, so the data frame has a total of (2 periods) x (4 transects) x (20 sites) = 160 rows.
 
-```{r read_count_data}
-## get count data
+```{r read_count_data, message=FALSE}
+## read count data
 counts <- read_csv("./data/transectcounts.csv")
 colnames(counts)
 ## split out before/after counts of sunflower stars
-stars <- counts %>%
+## wide format
+stars_wide <- counts %>%
   select(ssws, transect, sunflower.star) %>%
   spread(ssws, value = sunflower.star)  %>%
   select(-transect)
+## tidy format
+stars_tidy <- stars_wide %>%
+  gather(key = time, value = count)
 ```
+
+## Step 3: Plot the data
+
+These data contain a lot of zeros, so visualization can be a bit tricky. Here are two options: a jittered dot plot (left) and violin plot (right).
+
+```{r plot_data, fig.height=4, fig.width=7}
+## base plot
+pp <- ggplot(stars_tidy, aes(x=time, y=count, color=time))
+## jittered dotplot
+p1 <- pp + geom_jitter(shape=16, position=position_jitter(0.3))
+## violin plot
+p2 <- pp + geom_violin()
+## combined
+p1 + p2 & theme_bw() &
+  theme(legend.position="none") &
+  scale_x_discrete(limits=c("before","after")) &
+  labs(x = "", y = "Count")
+```
+
 
 # Analyses
 
@@ -86,13 +136,13 @@ stars <- counts %>%
 area <- 3.75
 
 ## estimated mean density before
-b_fit <- glm(before ~ 1, data = stars, family = poisson(link = "log"))
+b_fit <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
 summary(b_fit)
 b_mean <- exp(sum(coef(b_fit)))/area
 b_mean
 
 ## estimated mean density after
-a_fit <- glm(after ~ 1, data = stars, family = poisson(link = "log"))
+a_fit <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
 summary(a_fit)
 a_mean <- exp(sum(coef(a_fit)))/area
 a_mean
@@ -101,12 +151,10 @@ a_mean
 ## Bayesian using `JAGS`
 
 ```{r pois_glm_jags, message=FALSE}
-library(R2jags)
-
 cat("
 
 data {
-  N <- dim(stars);
+  N <- dim(stars_wide);
 }
 
 model {
@@ -117,8 +165,8 @@ model {
   lambda_aft <- exp(ln_lambda_aft);
   ## LIKELIHOOD
   for(i in 1:N[1]) {
-    stars[i,1] ~ dpois(lambda_aft * area);
-    stars[i,2] ~ dpois(lambda_bef * area);
+    stars_wide[i,1] ~ dpois(lambda_aft * area);
+    stars_wide[i,2] ~ dpois(lambda_bef * area);
   }
 } ## end model description
 
@@ -126,7 +174,7 @@ model {
 
 
 ## 1. data to pass to JAGS
-dat_jags <- c("stars", "area") 
+dat_jags <- c("stars_wide", "area") 
 
 ## 2. model params for JAGS to return
 par_jags <- c("lambda_bef","lambda_aft")
@@ -184,7 +232,7 @@ hist(mod_fit$BUGSoutput$sims.list$lambda_aft, breaks = brk,
 cat("
 
 data {
-  N <- dim(stars);
+  N <- dim(stars_wide);
 }
 
 model {
@@ -206,8 +254,8 @@ model {
   var_aft <- mean_aft / p_aft;
   ## LIKELIHOOD
   for(i in 1:N[1]) {
-    stars[i,1] ~ dnegbin(p_aft, r_aft);
-    stars[i,2] ~ dnegbin(p_bef, r_bef);
+    stars_wide[i,1] ~ dnegbin(p_aft, r_aft);
+    stars_wide[i,2] ~ dnegbin(p_bef, r_bef);
   }
 } ## end model description
 
