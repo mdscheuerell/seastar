@@ -62,9 +62,9 @@ $$
 and $\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)$ as with the Poisson distribution. Of note, the variance of the negative binomial distribution $\sigma^2$ can be calculated as
 
 $$
-\sigma^2 = \mu + \frac{\mu^2}{r},
+\sigma^2 = \lambda_t A + \frac{(\lambda_t A)^2}{r},
 $$
-which means the variance converges to the mean as $r \rightarrow \infty$, whereby the negative binomial converges to the Poisson.
+where the variance converges to the mean as $r \rightarrow \infty$, and thus the negative binomial converges to the Poisson.
 
 # Requirements
 
@@ -76,8 +76,8 @@ I rely on a number of packages for reading, munging, and plotting the data, whic
 
 In addition to some frequentist approaches, I also show different options for Bayesian model fitting using the following software and packages:
 
-* [JAGS](http://mcmc-jags.sourceforge.net/) and the [__R2jags__](https://cran.r-project.org/web/packages/R2jags/index.html) package;
-* [Stan](http://mc-stan.org/) and the [__rstanarm__](http://mc-stan.org/rstanarm/index.html) package.
+* [__JAGS__](http://mcmc-jags.sourceforge.net/) and the [__R2jags__](https://cran.r-project.org/web/packages/R2jags/index.html) package;
+* [__Stan__](http://mc-stan.org/) and the [__rstanarm__](http://mc-stan.org/rstanarm/index.html) package.
 
 ```{r load_pkgs, message=FALSE}
 ## for reading data
@@ -246,7 +246,7 @@ The first thing we can do is examine a summary table of the posterior samples.
 print(mod_fit)
 ```
 
-Visual summaries of the results can also be useful. Here are histograms of the samples (left) and a summary of the median and 95% credible interval (right).
+Visual summaries of the results can also be useful. Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
 
 ```{r plot_pois_fit_jags, fig.height=4, fig.width=7, message=FALSE}
 ## gather posteriors samples
@@ -261,7 +261,7 @@ pdat2 <- pdat %>%
             hi = quantile(samples, 0.975))
 ## histogram of posteriors
 p1 <- ggplot(pdat, aes(samples, fill = Time)) +
-  geom_histogram(bins = 200) +
+  geom_histogram(bins = 100) +
   guides(fill = guide_legend(reverse=TRUE)) +
   labs(x = expression(Density~(m^-2)), y = "Count")
 p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
