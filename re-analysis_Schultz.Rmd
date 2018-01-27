@@ -1,5 +1,5 @@
 ---
-title: "Re-analysis of data in Schultz et al. (2016)"
+title: "Analysis of count data: an example based on data in Schultz et al. (2016)"
 author: "Mark Scheuerell"
 output:
   html_document:
@@ -23,7 +23,11 @@ This is version `r paste0('0.',format(Sys.time(), '%y.%m.%d'))`.
 
 ## Models for count data
 
-The before/after comparison of organism densities in Schultz et al. is based upon discrete counts of individuals. Among the options for analyzing count data, the Poisson distribution is rather straightforward. If we expect, on average, $\lambda_t$ individuals m^-2^ in time period $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) can me modeled as
+The before/after comparison of organism densities in Schultz et al. is based upon discrete counts of individuals. Thus, we should really consider statistical distributions that reflect the true nature of the data rather than trying to transform the data and analyze it with a continuous distribution (e.g., Gaussian).
+
+### Poisson distribution
+
+Among the options for analyzing count data, the Poisson distribution is rather straightforward. If we expect, on average, $\lambda_t$ individuals m^-2^ in time period $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) can me modeled as
 
 $$
 c_{i,t} \sim \text{Poisson}(\lambda_t A).
@@ -34,6 +38,8 @@ Because the rate constant $\lambda_t$ must be greater than zero, one generally a
 $$
 \log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2).
 $$
+
+### Negative binomial distribution
 
 Another alternatve is the negative binomial distribution, which has an additional parameter to account for overdispersion in the data. Specifically,
 
@@ -50,10 +56,15 @@ $$
 The probability parameter $p$ can be written in terms of $r$ and the underlying mean $\lambda_t A$, whereby
 
 $$
-p = \over{}{}
+p = \frac{r}{r + \lambda_t A}
 $$
 
-In this case, the comparison of interest is the mean density (m^-2^) of sea stars before and after the wasting event.
+and $\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)$ as with the Poisson distribution. Of note, the variance of the negative binomial distribution $\sigma^2$ can be calculated as
+
+$$
+\sigma^2 = \mu + \frac{\mu^2}{r},
+$$
+which means the variance converges to the mean as $r \rightarrow \infty$, whereby the negative binomial converges to the Poisson.
 
 # Requirements
 
@@ -81,6 +92,11 @@ library(patchwork)
 ## for model fitting
 library(R2jags)
 library(rstanarm)
+```
+
+I also make use of a function for easily converting real numbers to some desired precision in combination with `round()`, `ceiling()`, and `floor()`.
+
+```{r func_defn}
 ## function for number conversion
 Re2prec <- function(x, map = "round", prec = 1) {
   ## 'map' can be round, floor, or ceiling
@@ -249,9 +265,8 @@ p1 <- ggplot(pdat, aes(samples, fill = Time)) +
   guides(fill = guide_legend(reverse=TRUE)) +
   labs(x = expression(Density~(m^-2)), y = "Count")
 p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
+  geom_point(aes(size=1.5)) +
   geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
-  geom_line() +
-  geom_point(aes(size=1.2)) +
   scale_x_discrete(limits=c("before","after")) +
   xlab("") +
   ylab(expression(Density~(m^-2))) +
@@ -316,7 +331,7 @@ Again we can examine a summary table of the parameter estimates. Notice that in 
 print(mod_fit_2)
 ```
 
-This time I use a frequency plot instead of a histogram because the overlap in the distributions makes it hard to discern otherwise.
+This time I use a frequency plot instead of a histogram because the overlap in the distributions makes them hard to discern otherwise.
 
 ```{r plot_nb_fit_jags, fig.height=4, fig.width=7, message=FALSE}
 ## gather posteriors samples
@@ -338,9 +353,8 @@ p1 <- ggplot(pdat, aes(samples, color = Time)) +
   guides(color = guide_legend(reverse=TRUE)) +
   labs(x = expression(Density~(m^-2)), y = "Count")
 p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
+  geom_point(aes(size=1.5)) +
   geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
-  geom_line() +
-  geom_point(aes(size=1.2)) +
   scale_x_discrete(limits=c("before","after")) +
   labs(x = "", y = expression(Density~(m^-2))) +
   theme(legend.position="none")
