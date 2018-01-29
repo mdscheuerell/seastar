@@ -179,14 +179,14 @@ area <- 3.75
 ## estimated mean density before
 po_fit_glm_bef <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
 summary(po_fit_glm_bef)
-## convert from log to real space
+## convert from log to normal space
 round(lambda_bef <- exp(coef(po_fit_glm_bef))/area, 2)
 
 ## estimated mean density after
 po_fit_glm_aft <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
 summary(po_fit_glm_aft)
-## convert from log to real space
-round(lambda_aft <- exp(coef(po_fit_glm_aft))/area, 2)
+## convert from log to normal space
+round(lambda_aft <- exp(coef(po_fit_glm_aft))/area, 3)
 ```
 
 ### Bayesian using `JAGS`
@@ -276,17 +276,56 @@ p1 + p2
 
 ### Bayesian using `Stan`
 
-```{r pois_fit_stan, message=FALSE}
+```{r pois_fit_stan, results='hide'}
 ## before
-po_fit_stan_bef <- stan_glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
-print(po_fit_stan_bef)
-plot(po_fit_stan_bef, plotfun = "areas", prob = 0.95)
+po_fit_stan_bef <- stan_glm(before ~ 1, data = stars_wide, family = poisson(link = "log"),
+                            prior = normal(0, 1), prior_intercept = normal(0, 5),
+                            chains = 4, iter = 2000, warmup = 1500)
 ## after
-po_fit_stan_aft <- stan_glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
-print(po_fit_stan_aft)
-plot(po_fit_stan_aft, plotfun = "areas", prob = 0.95)
+po_fit_stan_aft <- stan_glm(after ~ 1, data = stars_wide, family = poisson(link = "log"),
+                            prior = normal(0, 1), prior_intercept = normal(0, 5),
+                            chains = 4, iter = 2000, warmup = 1500)
 ```
 
+And here are the results based on the `print()` and `plot()` options in `rstanarm`.
+
+```{r pois_out_stan}
+## before
+## convert from log to normal space
+round(exp(coef(po_fit_stan_bef))/area, 2)
+
+## after
+## convert from log to normal space
+round(exp(coef(po_fit_stan_aft))/area, 3)
+```
+
+Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
+
+```{r plot_pois_fit_stan, fig.height=4, fig.width=7, message=FALSE}
+## gather posteriors samples
+pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
+                   samples = exp(c(as.matrix(po_fit_stan_bef),
+                                   as.matrix(po_fit_stan_aft)))/area)
+## summary of posteriors
+pdat2 <- pdat %>%
+  group_by(Time) %>%
+  summarize(lo = quantile(samples, 0.025),
+            med = quantile(samples, 0.5),
+            hi = quantile(samples, 0.975))
+## histogram of posteriors
+p1 <- ggplot(pdat, aes(samples, fill = Time)) +
+  geom_histogram(bins = 100) +
+  guides(fill = guide_legend(reverse=TRUE)) +
+  labs(x = expression(Density~(m^-2)), y = "Count")
+p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
+  geom_point(aes(size=1.5)) +
+  geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
+  scale_x_discrete(limits=c("before","after")) +
+  xlab("") +
+  ylab(expression(Density~(m^-2))) +
+  theme(legend.position="none")
+p1 + p2
+```
 
 ## Negative binomial models
 
