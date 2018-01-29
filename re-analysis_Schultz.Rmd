@@ -189,7 +189,7 @@ summary(po_fit_glm_aft)
 round(lambda_aft <- exp(coef(po_fit_glm_aft))/area, 3)
 ```
 
-### Bayesian using `JAGS`
+### Bayesian using `jags`
 
 ```{r pois_fit_jags, message=FALSE}
 ## define Poisson model in JAGS
@@ -274,7 +274,7 @@ p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
 p1 + p2
 ```
 
-### Bayesian using `Stan`
+### Bayesian using `stan_glm`
 
 ```{r pois_fit_stan, results='hide'}
 ## before
@@ -331,7 +331,7 @@ p1 + p2
 
 ## Negative binomial models
 
-### Bayesian using `JAGS`
+### Bayesian using `jags`
 
 ```{r nb_fit_jags, message=FALSE}
 ## define negative binomial model in JAGS
@@ -343,8 +343,8 @@ data {
 
 model {
   ## PRIORS
-  r_bef ~ dnorm(0,0.001) T(0,);
-  r_aft ~ dnorm(0,0.001) T(0,);
+  r_bef ~ dnorm(0,0.01) T(0,);
+  r_aft ~ dnorm(0,0.01) T(0,);
   lambda_bef ~ dnorm(0,0.1) T(0,);
   lambda_aft ~ dnorm(0,0.1) T(0,);
   ## DERIVED PARAMS
@@ -414,50 +414,50 @@ p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
 p1 + p2
 ```
 
-### Bayesian using `Stan`
+### Bayesian using `stan_glm`
 
 ```{r nb_fit_stan, results='hide'}
 ## before
 nb_fit_stan_bef <- stan_glm.nb(before ~ 1, data = stars_wide, 
-#                            prior = normal(0, 1), prior_intercept = normal(0, 10), prior_aux = normal(0, 10),
-                            prior = NULL, prior_intercept = NULL, prior_aux = NULL,
-                            chains = 4, iter = 2000, warmup = 1500)
+                            prior_intercept = normal(0, 10), prior_aux = normal(0, 10),
+                            chains = 4, iter = 6000, warmup = 1000, thin = 10)
 ## after
 nb_fit_stan_aft <- stan_glm.nb(after ~ 1, data = stars_wide, 
-#                            prior = normal(0, 1), prior_intercept = normal(0, 10), #prior_aux = normal(0, 10),
-                            chains = 4, iter = 2000, warmup = 1500)
+                            prior_intercept = normal(0, 10), prior_aux = normal(0, 10),
+                            chains = 4, iter = 6000, warmup = 1000, thin = 10)
 ```
 
-And here are the results based on the `print()` and `plot()` options in `rstanarm`.
+#### Examine parameter estimates
+
+And here are the results based on `summary()`. Note that the estimates of the mean and overdispersion are in log-space.
 
 ```{r nb_out_stan}
 ## before
-## convert from log to normal space
-#round(exp(coef(nb_fit_stan_bef))/area, 2)
 summary(nb_fit_stan_bef)
 
 ## after
-## convert from log to normal space
-#round(exp(coef(nb_fit_stan_aft))/area, 3)
 summary(nb_fit_stan_aft)
 ```
 
 Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
 
-```{r plot_nb_fit_stan, fig.height=4, fig.width=7, message=FALSE, eval=FALSE}
+```{r plot_nb_fit_stan, fig.height=4, fig.width=7, message=FALSE}
 ## gather posteriors samples
 pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
-                   samples = exp(c(as.matrix(nb_fit_stan_bef),
-                                   as.matrix(nb_fit_stan_aft)))/area)
+                   samples = exp(c(as.matrix(nb_fit_stan_bef)[,1],
+                                   as.matrix(nb_fit_stan_aft)[,1]))/area)
 ## summary of posteriors
 pdat2 <- pdat %>%
   group_by(Time) %>%
   summarize(lo = quantile(samples, 0.025),
             med = quantile(samples, 0.5),
             hi = quantile(samples, 0.975))
+## trim away big values for histogram
+pdat <- pdat %>%
+  filter(samples <= 2)
 ## histogram of posteriors
-p1 <- ggplot(pdat, aes(samples, fill = Time)) +
-  geom_histogram(bins = 100) +
+p1 <- ggplot(pdat, aes(samples, color = Time)) +
+  geom_freqpoly(bins = 50) +
   guides(fill = guide_legend(reverse=TRUE)) +
   labs(x = expression(Density~(m^-2)), y = "Count")
 p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
