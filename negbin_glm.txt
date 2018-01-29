@@ -6,13 +6,11 @@ data {
 
 model {
   ## PRIORS
-  ln_lambda_bef ~ dnorm(0,0.01);
-  ln_lambda_aft ~ dnorm(0,0.01);
-  r_bef ~ dunif(0,100);
-  r_aft ~ dunif(0,100);
+  r_bef ~ dnorm(0,0.001) T(0,);
+  r_aft ~ dnorm(0,0.001) T(0,);
+  lambda_bef ~ dnorm(0,0.1) T(0,);
+  lambda_aft ~ dnorm(0,0.1) T(0,);
   ## DERIVED PARAMS
-  lambda_bef <- exp(ln_lambda_bef);
-  lambda_aft <- exp(ln_lambda_aft);
   mu_bef <- lambda_bef * area; 
   mu_aft <- lambda_aft * area; 
   p_aft <- r_aft / (r_aft + mu_aft);

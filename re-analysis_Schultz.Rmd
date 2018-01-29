@@ -27,7 +27,7 @@ The before/after comparison of organism densities in Schultz et al. is based upo
 
 ### Poisson distribution
 
-Among the options for analyzing count data, the Poisson distribution is rather straightforward. If we expect, on average, $\lambda_t$ individuals m^-2^ in time period $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) can me modeled as
+The Poisson distribution is one of the most common ways to model count data because it has only one parameter to estimate (i.e., the mean are the variance are equal). If we expect, on average, $\lambda_t$ individuals m^-2^ at time $t$, and we sample a total of $A$ m^2^, then each of $i$ counts during that period ($c_{i,t}$) would reflect the following Poisson process:
 
 $$
 c_{i,t} \sim \text{Poisson}(\lambda_t A).
@@ -41,7 +41,7 @@ $$
 
 ### Negative binomial distribution
 
-Another alternatve is the negative binomial distribution, which has an additional parameter to account for overdispersion in the data. Specifically,
+An alternatve to the Poisson is the negative binomial distribution, which has an additional parameter to account for overdispersion in the data (i.e. the mean and variance are not equal). Specifically,
 
 $$
 c_{i,t} \sim \text{NegBin}(p, r).
@@ -64,7 +64,7 @@ and $\log(\lambda_t) \sim \text{Normal}(\mu, \sigma^2)$ as with the Poisson dist
 $$
 \sigma^2 = \lambda_t A + \frac{(\lambda_t A)^2}{r},
 $$
-where the variance converges to the mean as $r \rightarrow \infty$, and thus the negative binomial converges to the Poisson.
+such that the variance converges to the mean as $r \rightarrow \infty$, and the negative binomial converges to the Poisson.
 
 # Requirements
 
@@ -177,19 +177,19 @@ p1 + p2 &
 area <- 3.75
 
 ## estimated mean density before
-glm_fit_bef <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
-summary(glm_fit_bef)
+po_fit_glm_bef <- glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
+summary(po_fit_glm_bef)
 ## convert from log to real space
-round(lambda_bef <- exp(coef(glm_fit_bef))/area, 2)
+round(lambda_bef <- exp(coef(po_fit_glm_bef))/area, 2)
 
 ## estimated mean density after
-glm_fit_aft <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
-summary(glm_fit_aft)
+po_fit_glm_aft <- glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
+summary(po_fit_glm_aft)
 ## convert from log to real space
-round(lambda_aft <- exp(coef(glm_fit_aft))/area, 2)
+round(lambda_aft <- exp(coef(po_fit_glm_aft))/area, 2)
 ```
 
-## Bayesian using `JAGS`
+### Bayesian using `JAGS`
 
 ```{r pois_fit_jags, message=FALSE}
 ## define Poisson model in JAGS
@@ -235,15 +235,15 @@ mod_jags <- list(data = dat_jags,
                  n.burnin = as.integer(mcmc_burn),
                  n.thin = as.integer(mcmc_thin))
 ## fit model
-mod_fit <- do.call(jags.parallel, mod_jags)
+po_fit_jags <- do.call(jags.parallel, mod_jags)
 ```
 
-### Examine parameter estimates
+#### Examine parameter estimates
 
 The first thing we can do is examine a summary table of the posterior samples.
 
 ```{r print_pois_fit_jags}
-print(mod_fit)
+print(po_fit_jags)
 ```
 
 Visual summaries of the results can also be useful. Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
@@ -251,8 +251,8 @@ Visual summaries of the results can also be useful. Here are histograms of the p
 ```{r plot_pois_fit_jags, fig.height=4, fig.width=7, message=FALSE}
 ## gather posteriors samples
 pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
-                   samples = c(mod_fit$BUGSoutput$sims.list$lambda_bef,
-                               mod_fit$BUGSoutput$sims.list$lambda_aft))
+                   samples = c(po_fit_jags$BUGSoutput$sims.list$lambda_bef,
+                               po_fit_jags$BUGSoutput$sims.list$lambda_aft))
 ## summary of posteriors
 pdat2 <- pdat %>%
   group_by(Time) %>%
@@ -274,9 +274,23 @@ p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
 p1 + p2
 ```
 
+### Bayesian using `Stan`
+
+```{r pois_fit_stan, message=FALSE}
+## before
+po_fit_stan_bef <- stan_glm(before ~ 1, data = stars_wide, family = poisson(link = "log"))
+print(po_fit_stan_bef)
+plot(po_fit_stan_bef, plotfun = "areas", prob = 0.95)
+## after
+po_fit_stan_aft <- stan_glm(after ~ 1, data = stars_wide, family = poisson(link = "log"))
+print(po_fit_stan_aft)
+plot(po_fit_stan_aft, plotfun = "areas", prob = 0.95)
+```
+
+
 ## Negative binomial models
 
-## Bayesian using `JAGS`
+### Bayesian using `JAGS`
 
 ```{r nb_fit_jags, message=FALSE}
 ## define negative binomial model in JAGS
@@ -288,13 +302,11 @@ data {
 
 model {
   ## PRIORS
-  ln_lambda_bef ~ dnorm(0,0.01);
-  ln_lambda_aft ~ dnorm(0,0.01);
-  r_bef ~ dunif(0,100);
-  r_aft ~ dunif(0,100);
+  r_bef ~ dnorm(0,0.001) T(0,);
+  r_aft ~ dnorm(0,0.001) T(0,);
+  lambda_bef ~ dnorm(0,0.1) T(0,);
+  lambda_aft ~ dnorm(0,0.1) T(0,);
   ## DERIVED PARAMS
-  lambda_bef <- exp(ln_lambda_bef);
-  lambda_aft <- exp(ln_lambda_aft);
   mu_bef <- lambda_bef * area; 
   mu_aft <- lambda_aft * area; 
   p_aft <- r_aft / (r_aft + mu_aft);
@@ -320,15 +332,15 @@ mod_jags$model.file <-"negbin_glm.txt"
 mod_jags$parameters.to.save <- par_jags
 
 ## fit model
-mod_fit_2 <- do.call(jags.parallel, mod_jags)
+nb_fit_jags <- do.call(jags.parallel, mod_jags)
 ```
 
-### Examine parameter estimates
+#### Examine parameter estimates
 
 Again we can examine a summary table of the parameter estimates. Notice that in this case, we also have estimates for mean and variance of the density of stars per 3.75 m^2^.
 
 ```{r}
-print(mod_fit_2)
+print(nb_fit_jags)
 ```
 
 This time I use a frequency plot instead of a histogram because the overlap in the distributions makes them hard to discern otherwise.
@@ -336,8 +348,8 @@ This time I use a frequency plot instead of a histogram because the overlap in t
 ```{r plot_nb_fit_jags, fig.height=4, fig.width=7, message=FALSE}
 ## gather posteriors samples
 pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
-                   samples = c(mod_fit_2$BUGSoutput$sims.list$lambda_bef,
-                               mod_fit_2$BUGSoutput$sims.list$lambda_aft))
+                   samples = c(nb_fit_jags$BUGSoutput$sims.list$lambda_bef,
+                               nb_fit_jags$BUGSoutput$sims.list$lambda_aft))
 ## summary of posteriors
 pdat2 <- pdat %>%
   group_by(Time) %>%
@@ -346,10 +358,10 @@ pdat2 <- pdat %>%
             hi = quantile(samples, 0.975))
 ## trim away big values for histogram
 pdat <- pdat %>%
-  filter(samples <= 1.5)
+  filter(samples <= 2)
 ## histogram of posteriors
 p1 <- ggplot(pdat, aes(samples, color = Time)) +
-  geom_freqpoly(bins = 100) +
+  geom_freqpoly(bins = 50) +
   guides(color = guide_legend(reverse=TRUE)) +
   labs(x = expression(Density~(m^-2)), y = "Count")
 p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
