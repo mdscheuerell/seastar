@@ -279,11 +279,11 @@ p1 + p2
 ```{r pois_fit_stan, results='hide'}
 ## before
 po_fit_stan_bef <- stan_glm(before ~ 1, data = stars_wide, family = poisson(link = "log"),
-                            prior = normal(0, 1), prior_intercept = normal(0, 5),
+                            prior = normal(0, 1), prior_intercept = normal(0, 10),
                             chains = 4, iter = 2000, warmup = 1500)
 ## after
 po_fit_stan_aft <- stan_glm(after ~ 1, data = stars_wide, family = poisson(link = "log"),
-                            prior = normal(0, 1), prior_intercept = normal(0, 5),
+                            prior = normal(0, 1), prior_intercept = normal(0, 10),
                             chains = 4, iter = 2000, warmup = 1500)
 ```
 
@@ -292,11 +292,13 @@ And here are the results based on the `print()` and `plot()` options in `rstanar
 ```{r pois_out_stan}
 ## before
 ## convert from log to normal space
+summary(po_fit_stan_bef)
 round(exp(coef(po_fit_stan_bef))/area, 2)
 
 ## after
 ## convert from log to normal space
 round(exp(coef(po_fit_stan_aft))/area, 3)
+summary(po_fit_stan_aft)
 ```
 
 Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
@@ -408,6 +410,62 @@ p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
   geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
   scale_x_discrete(limits=c("before","after")) +
   labs(x = "", y = expression(Density~(m^-2))) +
+  theme(legend.position="none")
+p1 + p2
+```
+
+### Bayesian using `Stan`
+
+```{r nb_fit_stan, results='hide'}
+## before
+nb_fit_stan_bef <- stan_glm.nb(before ~ 1, data = stars_wide, 
+#                            prior = normal(0, 1), prior_intercept = normal(0, 10), prior_aux = normal(0, 10),
+                            prior = NULL, prior_intercept = NULL, prior_aux = NULL,
+                            chains = 4, iter = 2000, warmup = 1500)
+## after
+nb_fit_stan_aft <- stan_glm.nb(after ~ 1, data = stars_wide, 
+#                            prior = normal(0, 1), prior_intercept = normal(0, 10), #prior_aux = normal(0, 10),
+                            chains = 4, iter = 2000, warmup = 1500)
+```
+
+And here are the results based on the `print()` and `plot()` options in `rstanarm`.
+
+```{r nb_out_stan}
+## before
+## convert from log to normal space
+#round(exp(coef(nb_fit_stan_bef))/area, 2)
+summary(nb_fit_stan_bef)
+
+## after
+## convert from log to normal space
+#round(exp(coef(nb_fit_stan_aft))/area, 3)
+summary(nb_fit_stan_aft)
+```
+
+Here are histograms of the posterior samples (left) and a summary of the median and 95% credible interval of the posterior samples (right).
+
+```{r plot_nb_fit_stan, fig.height=4, fig.width=7, message=FALSE, eval=FALSE}
+## gather posteriors samples
+pdat <- data.frame(Time = rep(c("before","after"), ea=mcmc_samp),
+                   samples = exp(c(as.matrix(nb_fit_stan_bef),
+                                   as.matrix(nb_fit_stan_aft)))/area)
+## summary of posteriors
+pdat2 <- pdat %>%
+  group_by(Time) %>%
+  summarize(lo = quantile(samples, 0.025),
+            med = quantile(samples, 0.5),
+            hi = quantile(samples, 0.975))
+## histogram of posteriors
+p1 <- ggplot(pdat, aes(samples, fill = Time)) +
+  geom_histogram(bins = 100) +
+  guides(fill = guide_legend(reverse=TRUE)) +
+  labs(x = expression(Density~(m^-2)), y = "Count")
+p2 <- ggplot(pdat2, aes(x=Time, y=med, color=Time)) +
+  geom_point(aes(size=1.5)) +
+  geom_errorbar(aes(ymin=lo, ymax=hi), width=0) +
+  scale_x_discrete(limits=c("before","after")) +
+  xlab("") +
+  ylab(expression(Density~(m^-2))) +
   theme(legend.position="none")
 p1 + p2
 ```
